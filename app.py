@@ -5,7 +5,6 @@ import pyvista as pv
 import tempfile
 import os
 from stpyvista import stpyvista
-from openpyxl import load_workbook
 
 # Loading Image using PIL
 im = Image.open('logo.png')
@@ -105,7 +104,7 @@ with col1:
         # Use a container to group the buttons
         button_container = st.container()
         with button_container:
-            b1, b2, b3, b4, b5, b6, b7 = st.columns([1, 2, 1, 1, 1, 1, 1])
+            b1, b2, b3, b4, b5, b6 = st.columns([1, 2, 1, 1, 1, 1])
             with b1:
                 if st.button("Envoyer"):
                     if name and requester and uploaded_file and printer_selection and material and color and estimated_time:
@@ -144,23 +143,50 @@ with col1:
                         # Save the updated database back to the Excel file
                         with pd.ExcelWriter(excel_file, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
                             if 'SubmissionNumber' in database_data.columns or not(st.session_state.first_value):
-                                pd.DataFrame([new_record]).to_excel(writer, sheet_name=database_sheet, index=False, header=False, startrow=(database_data['SubmissionNumber'].max() + st.session_state.submission_counter - 1))
+                                database_data = pd.concat([pd.read_excel(excel_file, sheet_name=database_sheet),pd.DataFrame([new_record])])
+                                print(database_data)
+                                filtered_data = database_data[(database_data['State'] == 'Waitlist') &
+                                                            (database_data['Printer'] == printer_selection) &
+                                                            (database_data['SubmissionNumber'] <= next_submission_number + 1)]
+                                total_wait_time = filtered_data['Estimated Time'].sum() if not filtered_data.empty else 0
+                                new_record['Total Wait Time'] = total_wait_time
+                                print(st.session_state.submission_counter)
+                                pd.DataFrame([new_record]).to_excel(writer, sheet_name=database_sheet, index=False, header=False, startrow=(database_data['SubmissionNumber'].max()))
+
+                                
+                                #print(filtered_data)
+                                #with col2:
+                                #    st.table(filtered_data)
+                                
+
                             else:
                                 if st.session_state.first_value:
                                     st.session_state.first_value = False
                                     pd.DataFrame([new_record]).to_excel(writer, sheet_name=database_sheet, index=False, header=True)
                                     st.session_state.submission_counter += 1
+                                    database_data = pd.read_excel(excel_file, sheet_name=database_sheet)
+                                    print(database_data)
+                                    database_data['Total time']=estimated_time
+                                '''
+                                else:
+                                    filtered_data = database_data[(database_data['State'] == 'Waitlist') &
+                                                                (database_data['Printer'] == printer_selection) &
+                                                                (database_data['SubmissionNumber'] < next_submission_number)]
+                                    print(filtered_data)
+                                    with col2:
+                                        st.table(filtered_data)
+                                '''
                         # Display the table in the second column
-                        database_data = pd.read_excel(excel_file, sheet_name=database_sheet)
-                        database_data['Total Time'] = database_data[(database_data['State'] == 'Waitlist' )& (database_data['Printer'] == printer_selection) & (database_data['SubmissionNumber']<next_submission_number )].groupby('Printer')['Estimated Time'].transform('sum') + database_data['Estimated Time']
-
-                        with col2:
-                            st.table(database_data)
-                    else:
+                        #database_data['Total Time'] = database_data[(database_data['State'] == 'Waitlist' )& (database_data['Printer'] == printer_selection) & (database_data['SubmissionNumber']<next_submission_number )].groupby('Printer')['Estimated Time'].transform('sum') + database_data['Estimated Time']
+                        
                         with col2:
                             database_data = pd.read_excel(excel_file, sheet_name=database_sheet)
-                            database_data['Total Time'] = database_data[(database_data['State'] == 'Waitlist' )& (database_data['Printer'] == printer_selection) & (database_data['SubmissionNumber']<database_data['SubmissionNumber'].max() )].groupby('Printer')['Estimated Time'].transform('sum')
-                            st.table(database_data)
+                            filtered_data = database_data[(database_data['State'] == 'Waitlist') &
+                                                            (database_data['Printer'] == printer_selection) &
+                                                            (database_data['SubmissionNumber'] <= next_submission_number + 1)]
+                            st.table(filtered_data[['SubmissionNumber','Material','Color','Estimated Time','Total Wait Time']])
+                            #st.table(database_data)
+                    else:
                         with col1:
                             st.error('Submission Failed! Please fill the form correctly')
             with b2:
